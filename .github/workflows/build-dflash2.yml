@@ -1,0 +1,215 @@
+# ==============================================================================
+# GitHub Actions: Build llama.cpp DFlash2 (PR #27342) Docker images
+#
+# 产出 3 个镜像，推送到 ghcr.io：
+#   - llama-dflash2:cuda       CUDA 12.9, 多架构 (rapids)
+#   - llama-dflash2:cuda-75    CUDA 12.9, Turing 架构 (2080Ti/T4)
+#   - llama-dflash2:cpu        纯 CPU
+#
+# 触发方式：
+#   - push 到 master/main 分支（改动 Dockerfile 或 workflow 时）
+#   - 手动 workflow_dispatch（可选 CUDA_ARCH、是否推送）
+#   - 定时每周一构建（保持与上游同步）
+#
+# 前置条件：
+#   1. 把此目录推送到你的 GitHub 仓库
+#   2. 在仓库 Settings > Actions > General 勾选 "Allow GitHub Actions to create
+#      and approve pull requests"（可选）
+#   3. 确认 GITHUB_TOKEN 有 packages:write 权限（默认已有）
+# ==============================================================================
+
+name: Build DFlash2 Docker Images
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'Dockerfile.cuda'
+      - 'Dockerfile.cpu'
+      - '.github/workflows/build-dflash2.yml'
+  workflow_dispatch:
+    inputs:
+      cuda_arch:
+        description: 'CUDA 架构 (75=2080Ti, 89=4090, rapids=多架构)'
+        required: false
+        default: 'rapids'
+      push_image:
+        description: '推送镜像到 ghcr.io'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+  schedule:
+    # 每周一 UTC 02:00 自动构建（保持与上游 dflash2 分支同步）
+    - cron: '0 2 * * 1'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ==========================================================================
+  # Job 1: CUDA 镜像（多架构 + 特定架构并行）
+  # ==========================================================================
+  build-cuda:
+    name: CUDA (${{ matrix.cuda_arch_label }})
+    runs-on: ubuntu-22.04-4core
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - cuda_arch: "rapids"
+            cuda_arch_label: "multi-arch"
+            tag_suffix: "cuda"
+          - cuda_arch: "75"
+            cuda_arch_label: "turing-2080Ti"
+            tag_suffix: "cuda-75"
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Lowercase repo name for image
+        id: repo
+        run: echo "name=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ steps.repo.outputs.name }}
+          tags: |
+            type=raw,value=${{ matrix.tag_suffix }}
+            type=raw,value=${{ matrix.tag_suffix }}-{{date 'YYYYMMDD'}}
+            type=sha,prefix=${{ matrix.tag_suffix }}-
+
+      - name: Build & push CUDA image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.cuda
+          push: ${{ github.event_name != 'pull_request' && (github.event.inputs.push_image != 'false') }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            CUDA_ARCH=${{ matrix.cuda_arch }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### CUDA Build: ${{ matrix.cuda_arch_label }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Architecture: \`${{ matrix.cuda_arch }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Tags: \`${{ steps.meta.outputs.tags }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+
+  # ==========================================================================
+  # Job 2: CPU 镜像
+  # ==========================================================================
+  build-cpu:
+    name: CPU-only
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Lowercase repo name for image
+        id: repo
+        run: echo "name=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ steps.repo.outputs.name }}
+          tags: |
+            type=raw,value=cpu
+            type=raw,value=cpu-{{date 'YYYYMMDD'}}
+            type=sha,prefix=cpu-
+
+      - name: Build & push CPU image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.cpu
+          push: ${{ github.event_name != 'pull_request' && (github.event.inputs.push_image != 'false') }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### CPU Build" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Tags: \`${{ steps.meta.outputs.tags }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+
+  # ==========================================================================
+  # Job 3: 生成 README 镜像列表 (可选)
+  # ==========================================================================
+  update-readme:
+    name: Update README badges
+    runs-on: ubuntu-22.04
+    needs: [build-cuda, build-cpu]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Lowercase repo name
+        id: repo
+        run: echo "name=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate package info
+        run: |
+          echo "### Docker Images Published" > package-info.md
+          echo "" >> package-info.md
+          echo "| Image | Tag | Pull Command |" >> package-info.md
+          echo "|-------|-----|-------------|" >> package-info.md
+          echo "| CUDA (multi-arch) | \`cuda\`, \`cuda-YYYYMMDD\` | \`docker pull ${{ env.REGISTRY }}/${{ steps.repo.outputs.name }}:cuda\` |" >> package-info.md
+          echo "| CUDA (Turing 2080Ti) | \`cuda-75\`, \`cuda-75-YYYYMMDD\` | \`docker pull ${{ env.REGISTRY }}/${{ steps.repo.outputs.name }}:cuda-75\` |" >> package-info.md
+          echo "| CPU-only | \`cpu\`, \`cpu-YYYYMMDD\` | \`docker pull ${{ env.Registry }}/${{ steps.repo.outputs.name }}:cpu\` |" >> package-info.md
+          echo "" >> package-info.md
+          echo "*Auto-updated: $(date -u)*" >> package-info.md
+
+      - name: Show info
+        run: cat package-info.md

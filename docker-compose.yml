@@ -1,0 +1,115 @@
+# ==============================================================================
+# docker-compose.yml for llama.cpp DFlash2 (PR #27342)
+#
+# 使用方式:
+#   1. 下载模型文件到 ./models/ 目录
+#   2. 选择要使用的 profile（下方注释说明）
+#   3. docker compose up -d dflash2-gpu
+#
+# Unraid 使用:
+#   在 Unraid 终端中:
+#   cd /mnt/cache/appdata/llama-dflash2
+#   docker compose up -d dflash2-gpu
+#
+# 可用 services:
+#   dflash2-gpu   DFlash2 + CUDA GPU（需要 NVIDIA GPU）
+#   dflash2-cpu   DFlash2 + CPU only
+#   mtp-gpu       内置 MTP + CUDA GPU（用于对比测试）
+#   baseline-gpu  无投机解码 + CUDA GPU（用于对比测试）
+# ==============================================================================
+
+# ---- 共享配置 ----
+x-common: &common
+  restart: unless-stopped
+  ports:
+    - "8080:8080"
+  volumes:
+    - ./models:/models:ro
+  shm_size: "4g"
+
+x-gpu: &gpu
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: all
+            capabilities: [gpu]
+
+# ---- 服务定义 ----
+services:
+  # ==========================================================================
+  # DFlash2 + GPU (主力服务)
+  # ==========================================================================
+  dflash2-gpu:
+    <<: [*common, *gpu]
+    image: ghcr.io/${IMAGE_OWNER:-your-username}/llama-dflash2:cuda
+    # 如果想用 2080Ti 专用镜像，改为 :cuda-75
+    container_name: llama-dflash2
+    command: >
+      -m /models/${TARGET_MODEL:-Qwen3.8-27B-Q4_K_M.gguf}
+      -md /models/${DRAFT_MODEL:-Qwen3.8-27B-DFlash2-Q4_K_M.gguf}
+      --spec-type draft-dflash
+      --spec-draft-n-max ${SPEC_N_MAX:-4}
+      -c ${CTX_SIZE:-32768}
+      -ngl ${NGL:-99}
+      -ngld ${NGLD:-99}
+      -fa on
+      -ctk q8_0 -ctv q8_0
+      --host 0.0.0.0 --port 8080
+    environment:
+      - LLAMA_ARG_HOST=0.0.0.0
+      - LLAMA_ARG_PORT=8080
+
+  # ==========================================================================
+  # DFlash2 + CPU (测试/低配环境)
+  # ==========================================================================
+  dflash2-cpu:
+    <<: *common
+    image: ghcr.io/${IMAGE_OWNER:-your-username}/llama-dflash2:cpu
+    container_name: llama-dflash2-cpu
+    command: >
+      -m /models/${TARGET_MODEL:-Qwen3.8-27B-Q4_K_M.gguf}
+      -md /models/${DRAFT_MODEL:-Qwen3.8-27B-DFlash2-Q4_K_M.gguf}
+      --spec-type draft-dflash
+      --spec-draft-n-max ${SPEC_N_MAX:-4}
+      -c ${CTX_SIZE:-8192}
+      -ngl 0
+      -fa on
+      --host 0.0.0.0 --port 8080
+
+  # ==========================================================================
+  # MTP (内置投机解码) + GPU — 对比测试用
+  # ==========================================================================
+  mtp-gpu:
+    <<: [*common, *gpu]
+    image: ghcr.io/${IMAGE_OWNER:-your-username}/llama-dflash2:cuda
+    container_name: llama-mtp
+    command: >
+      -m /models/${TARGET_MODEL:-Qwen3.8-27B-Q4_K_M.gguf}
+      --spec-type draft-mtp
+      --spec-draft-n-max ${SPEC_N_MAX:-4}
+      -c ${CTX_SIZE:-32768}
+      -ngl ${NGL:-99}
+      -fa on
+      -ctk q8_0 -ctv q8_0
+      --host 0.0.0.0 --port 8081
+    ports:
+      - "8081:8081"
+
+  # ==========================================================================
+  # 无投机解码 + GPU — 基线对比
+  # ==========================================================================
+  baseline-gpu:
+    <<: [*common, *gpu]
+    image: ghcr.io/${IMAGE_OWNER:-your-username}/llama-dflash2:cuda
+    container_name: llama-baseline
+    command: >
+      -m /models/${TARGET_MODEL:-Qwen3.8-27B-Q4_K_M.gguf}
+      -c ${CTX_SIZE:-32768}
+      -ngl ${NGL:-99}
+      -fa on
+      -ctk q8_0 -ctv q8_0
+      --host 0.0.0.0 --port 8082
+    ports:
+      - "8082:8082"

@@ -1,0 +1,82 @@
+# syntax=docker/dockerfile:1.7
+
+# ==============================================================================
+# Dockerfile for llama.cpp with DFlash2 speculative decoding support
+# PR #27342: https://github.com/ggml-org/llama.cpp/pull/27342
+# Branch: z-lab/llama.cpp-fork:dflash2 (commit 5ecbe1ac)
+#
+# Build args:
+#   GIT_URL     - git repo to clone      (default: z-lab fork)
+#   GIT_BRANCH  - branch/commit          (default: dflash2)
+#   GGML_CUDA   - CUDA backend ON/OFF    (default: ON)
+#   CUDA_ARCH   - CUDA arch target       (default: rapids)
+#                  75=2080Ti/T4, 86=3090, 89=4090, 90=H100, 120=Blackwell
+#
+# Build:
+#   docker build -t llama-dflash2 -f Dockerfile.cuda .
+#   docker build -t llama-dflash2 -f Dockerfile.cuda --build-arg CUDA_ARCH=75 .
+#
+# Run:
+#   docker run --gpus all -p 8080:8080 -v /path/to/models:/models llama-dflash2 \
+#     -m /models/Qwen3.8-27B-Q4_K_M.gguf \
+#     -md /models/Qwen3.8-27B-DFlash2-Q4_K_M.gguf \
+#     --spec-type draft-dflash --spec-draft-n-max 4 \
+#     -c 32768 -ngl 99 -ngld 99 -fa on -ctk q8_0 -ctv q8_0 \
+#     --host 0.0.0.0 --port 8080
+# ==============================================================================
+
+# ---- Builder stage ----
+ARG BASE_IMAGE=nvidia/cuda:12.9.1-devel-ubuntu24.04
+FROM ${BASE_IMAGE} AS builder
+
+ARG GIT_URL=https://github.com/z-lab/llama.cpp-fork.git
+ARG GIT_BRANCH=dflash2
+ARG GGML_CUDA=ON
+ARG CUDA_ARCH=rapids
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        cmake \
+        ninja-build \
+        git \
+        curl \
+        ca-certificates \
+        pkg-config \
+        build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+RUN git clone --depth 1 --branch "${GIT_BRANCH}" "${GIT_URL}" llama.cpp
+
+RUN cd llama.cpp && \
+    cmake -B build \
+        -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DGGML_CUDA=${GGML_CUDA} \
+        -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCH} \
+        -DLLAMA_CURL=ON \
+        -DLLAMA_BUILD_TESTS=OFF \
+        -DLLAMA_BUILD_EXAMPLES=OFF \
+        -DLLAMA_BUILD_SERVER=ON \
+    && \
+    cmake --build build --config Release -j$(nproc)
+
+# ---- Runtime stage: use runtime image (much smaller than devel) ----
+FROM nvidia/cuda:12.9.1-runtime-ubuntu24.04 AS runtime
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libcurl4 \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /build/llama.cpp/build/bin/llama-server /usr/local/bin/
+COPY --from=builder /build/llama.cpp/build/bin/llama-cli      /usr/local/bin/
+COPY --from=builder /build/llama.cpp/build/bin/llama-bench   /usr/local/bin/
+
+ENV LLAMA_ARG_HOST=0.0.0.0
+ENV LLAMA_ARG_PORT=8080
+
+EXPOSE 8080
+
+ENTRYPOINT ["llama-server"]
+CMD ["--help"]
