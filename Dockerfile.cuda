@@ -48,8 +48,10 @@ WORKDIR /build
 
 RUN git clone --depth 1 --branch "${GIT_BRANCH}" "${GIT_URL}" llama.cpp
 
-# Create symlink to CUDA stubs so linker can find libcuda.so (cu* driver API symbols)
-RUN ln -sf /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/libcuda.so
+# Create symlinks to CUDA stubs so linker can find libcuda.so and libcuda.so.1
+# libggml-cuda.so has NEEDED entry for libcuda.so.1, stubs only provide libcuda.so
+RUN ln -sf /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/libcuda.so && \
+    ln -sf /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/libcuda.so.1
 
 RUN cd llama.cpp && \
     cmake -B build \
