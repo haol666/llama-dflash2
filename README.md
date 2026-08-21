@@ -1,13 +1,3 @@
----
-AIGC:
-  ContentProducer: '001191110102MAD55U9H0F10002'
-  ContentPropagator: '001191110102MAD55U9H0F10002'
-  Label: '1'
-  ProduceID: '9234c361-413f-430f-86cf-d1c321ec2c74'
-  PropagateID: '9234c361-413f-430f-86cf-d1c321ec2c74'
-  ReservedCode1: '5290fdf8-c6bf-431d-a95b-9298e5429a73'
-  ReservedCode2: '5290fdf8-c6bf-431d-a95b-9298e5429a73'
----
 
 # llama.cpp DFlash2 Docker 镜像
 
