@@ -48,8 +48,10 @@ WORKDIR /build
 
 RUN git clone --depth 1 --branch "${GIT_BRANCH}" "${GIT_URL}" llama.cpp
 
+# Create symlink to CUDA stubs so linker can find libcuda.so (cu* driver API symbols)
+RUN ln -sf /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/libcuda.so
+
 RUN cd llama.cpp && \
-    export LIBRARY_PATH="/usr/local/cuda/lib64/stubs:${LIBRARY_PATH:-}" && \
     cmake -B build \
         -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
