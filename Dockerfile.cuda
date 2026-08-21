@@ -49,6 +49,7 @@ WORKDIR /build
 RUN git clone --depth 1 --branch "${GIT_BRANCH}" "${GIT_URL}" llama.cpp
 
 RUN cd llama.cpp && \
+    export LIBRARY_PATH="/usr/local/cuda/lib64/stubs:${LIBRARY_PATH:-}" && \
     cmake -B build \
         -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
