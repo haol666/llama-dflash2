@@ -9,8 +9,8 @@
 #   GIT_URL     - git repo to clone      (default: z-lab fork)
 #   GIT_BRANCH  - branch/commit          (default: dflash2)
 #   GGML_CUDA   - CUDA backend ON/OFF    (default: ON)
-#   CUDA_ARCH   - CUDA arch target       (default: rapids)
-#                  75=2080Ti/T4, 86=3090, 89=4090, 90=H100, 120=Blackwell
+#   CUDA_ARCH   - CUDA arch target       (default: 75;80;86;89;90)
+#                  75=2080Ti/T4, 80=A100, 86=3090, 89=4090, 90=H100
 #
 # Build:
 #   docker build -t llama-dflash2 -f Dockerfile.cuda .
@@ -32,7 +32,7 @@ FROM ${BASE_IMAGE} AS builder
 ARG GIT_URL=https://github.com/z-lab/llama.cpp-fork.git
 ARG GIT_BRANCH=dflash2
 ARG GGML_CUDA=ON
-ARG CUDA_ARCH=rapids
+ARG CUDA_ARCH=75;80;86;89;90
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         cmake \
