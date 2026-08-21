@@ -1,21 +1,17 @@
 # ==============================================================================
 # GitHub Actions: Build llama.cpp DFlash2 (PR #27342) Docker images
 #
-# 产出 3 个镜像，推送到 ghcr.io：
-#   - llama-dflash2:cuda       CUDA 12.9, 多架构 (rapids)
-#   - llama-dflash2:cuda-75    CUDA 12.9, Turing 架构 (2080Ti/T4)
-#   - llama-dflash2:cpu        纯 CPU
+# 浜у嚭 3 涓暅鍍忥紝鎺ㄩ€佸埌 ghcr.io锛?#   - llama-dflash2:cuda       CUDA 12.9, 澶氭灦鏋?(rapids)
+#   - llama-dflash2:cuda-75    CUDA 12.9, Turing 鏋舵瀯 (2080Ti/T4)
+#   - llama-dflash2:cpu        绾?CPU
 #
-# 触发方式：
-#   - push 到 master/main 分支（改动 Dockerfile 或 workflow 时）
-#   - 手动 workflow_dispatch（可选 CUDA_ARCH、是否推送）
-#   - 定时每周一构建（保持与上游同步）
-#
-# 前置条件：
-#   1. 把此目录推送到你的 GitHub 仓库
-#   2. 在仓库 Settings > Actions > General 勾选 "Allow GitHub Actions to create
-#      and approve pull requests"（可选）
-#   3. 确认 GITHUB_TOKEN 有 packages:write 权限（默认已有）
+# 瑙﹀彂鏂瑰紡锛?#   - push 鍒?master/main 鍒嗘敮锛堟敼鍔?Dockerfile 鎴?workflow 鏃讹級
+#   - 鎵嬪姩 workflow_dispatch锛堝彲閫?CUDA_ARCH銆佹槸鍚︽帹閫侊級
+#   - 瀹氭椂姣忓懆涓€鏋勫缓锛堜繚鎸佷笌涓婃父鍚屾锛?#
+# 鍓嶇疆鏉′欢锛?#   1. 鎶婃鐩綍鎺ㄩ€佸埌浣犵殑 GitHub 浠撳簱
+#   2. 鍦ㄤ粨搴?Settings > Actions > General 鍕鹃€?"Allow GitHub Actions to create
+#      and approve pull requests"锛堝彲閫夛級
+#   3. 纭 GITHUB_TOKEN 鏈?packages:write 鏉冮檺锛堥粯璁ゅ凡鏈夛級
 # ==============================================================================
 
 name: Build DFlash2 Docker Images
@@ -30,11 +26,11 @@ on:
   workflow_dispatch:
     inputs:
       cuda_arch:
-        description: 'CUDA 架构 (75=2080Ti, 89=4090, rapids=多架构)'
+        description: 'CUDA 鏋舵瀯 (75=2080Ti, 89=4090, rapids=澶氭灦鏋?'
         required: false
         default: 'rapids'
       push_image:
-        description: '推送镜像到 ghcr.io'
+        description: '鎺ㄩ€侀暅鍍忓埌 ghcr.io'
         required: false
         default: 'true'
         type: choice
@@ -42,8 +38,7 @@ on:
           - 'true'
           - 'false'
   schedule:
-    # 每周一 UTC 02:00 自动构建（保持与上游 dflash2 分支同步）
-    - cron: '0 2 * * 1'
+    # 姣忓懆涓€ UTC 02:00 鑷姩鏋勫缓锛堜繚鎸佷笌涓婃父 dflash2 鍒嗘敮鍚屾锛?    - cron: '0 2 * * 1'
 
 env:
   REGISTRY: ghcr.io
@@ -51,11 +46,10 @@ env:
 
 jobs:
   # ==========================================================================
-  # Job 1: CUDA 镜像（多架构 + 特定架构并行）
-  # ==========================================================================
+  # Job 1: CUDA 闀滃儚锛堝鏋舵瀯 + 鐗瑰畾鏋舵瀯骞惰锛?  # ==========================================================================
   build-cuda:
     name: CUDA (${{ matrix.cuda_arch_label }})
-    runs-on: ubuntu-22.04-4core
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -122,7 +116,7 @@ jobs:
           echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
 
   # ==========================================================================
-  # Job 2: CPU 镜像
+  # Job 2: CPU 闀滃儚
   # ==========================================================================
   build-cpu:
     name: CPU-only
@@ -180,7 +174,7 @@ jobs:
           echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
 
   # ==========================================================================
-  # Job 3: 生成 README 镜像列表 (可选)
+  # Job 3: 鐢熸垚 README 闀滃儚鍒楄〃 (鍙€?
   # ==========================================================================
   update-readme:
     name: Update README badges
