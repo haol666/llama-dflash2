@@ -2,7 +2,7 @@
 # GitHub Actions: Build llama.cpp DFlash2 (PR #27342) Docker images
 #
 # Outputs 3 images to ghcr.io:
-#   - llama-dflash2:cuda       CUDA 12.9, multi-arch (rapids)
+#   - llama-dflash2:cuda       CUDA 12.9, multi-arch (75;80;86;89;90)
 #   - llama-dflash2:cuda-75    CUDA 12.9, Turing arch (2080Ti/T4)
 #   - llama-dflash2:cpu        CPU-only
 #
@@ -24,9 +24,9 @@ on:
   workflow_dispatch:
     inputs:
       cuda_arch:
-        description: 'CUDA arch (75=2080Ti, 89=4090, rapids=multi-arch)'
+        description: 'CUDA arch (75=2080Ti, 89=4090, 75;80;86;89;90=multi-arch)'
         required: false
-        default: 'rapids'
+        default: '75;80;86;89;90'
       push_image:
         description: 'Push image to ghcr.io'
         required: false
@@ -54,7 +54,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - cuda_arch: "rapids"
+          - cuda_arch: "75;80;86;89;90"
             cuda_arch_label: "multi-arch"
             tag_suffix: "cuda"
           - cuda_arch: "75"
