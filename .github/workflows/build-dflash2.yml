@@ -1,17 +1,15 @@
 # ==============================================================================
 # GitHub Actions: Build llama.cpp DFlash2 (PR #27342) Docker images
 #
-# 浜у嚭 3 涓暅鍍忥紝鎺ㄩ€佸埌 ghcr.io锛?#   - llama-dflash2:cuda       CUDA 12.9, 澶氭灦鏋?(rapids)
-#   - llama-dflash2:cuda-75    CUDA 12.9, Turing 鏋舵瀯 (2080Ti/T4)
-#   - llama-dflash2:cpu        绾?CPU
+# Outputs 3 images to ghcr.io:
+#   - llama-dflash2:cuda       CUDA 12.9, multi-arch (rapids)
+#   - llama-dflash2:cuda-75    CUDA 12.9, Turing arch (2080Ti/T4)
+#   - llama-dflash2:cpu        CPU-only
 #
-# 瑙﹀彂鏂瑰紡锛?#   - push 鍒?master/main 鍒嗘敮锛堟敼鍔?Dockerfile 鎴?workflow 鏃讹級
-#   - 鎵嬪姩 workflow_dispatch锛堝彲閫?CUDA_ARCH銆佹槸鍚︽帹閫侊級
-#   - 瀹氭椂姣忓懆涓€鏋勫缓锛堜繚鎸佷笌涓婃父鍚屾锛?#
-# 鍓嶇疆鏉′欢锛?#   1. 鎶婃鐩綍鎺ㄩ€佸埌浣犵殑 GitHub 浠撳簱
-#   2. 鍦ㄤ粨搴?Settings > Actions > General 鍕鹃€?"Allow GitHub Actions to create
-#      and approve pull requests"锛堝彲閫夛級
-#   3. 纭 GITHUB_TOKEN 鏈?packages:write 鏉冮檺锛堥粯璁ゅ凡鏈夛級
+# Triggers:
+#   - push to main/master (when Dockerfile or workflow changes)
+#   - manual workflow_dispatch
+#   - weekly schedule (sync upstream dflash2 branch)
 # ==============================================================================
 
 name: Build DFlash2 Docker Images
@@ -26,11 +24,11 @@ on:
   workflow_dispatch:
     inputs:
       cuda_arch:
-        description: 'CUDA 鏋舵瀯 (75=2080Ti, 89=4090, rapids=澶氭灦鏋?'
+        description: 'CUDA arch (75=2080Ti, 89=4090, rapids=multi-arch)'
         required: false
         default: 'rapids'
       push_image:
-        description: '鎺ㄩ€侀暅鍍忓埌 ghcr.io'
+        description: 'Push image to ghcr.io'
         required: false
         default: 'true'
         type: choice
@@ -38,7 +36,8 @@ on:
           - 'true'
           - 'false'
   schedule:
-    # 姣忓懆涓€ UTC 02:00 鑷姩鏋勫缓锛堜繚鎸佷笌涓婃父 dflash2 鍒嗘敮鍚屾锛?    - cron: '0 2 * * 1'
+    # Weekly build every Monday UTC 02:00
+    - cron: '0 2 * * 1'
 
 env:
   REGISTRY: ghcr.io
@@ -46,7 +45,8 @@ env:
 
 jobs:
   # ==========================================================================
-  # Job 1: CUDA 闀滃儚锛堝鏋舵瀯 + 鐗瑰畾鏋舵瀯骞惰锛?  # ==========================================================================
+  # Job 1: CUDA images (multi-arch + turing, parallel)
+  # ==========================================================================
   build-cuda:
     name: CUDA (${{ matrix.cuda_arch_label }})
     runs-on: ubuntu-latest
@@ -116,11 +116,11 @@ jobs:
           echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
 
   # ==========================================================================
-  # Job 2: CPU 闀滃儚
+  # Job 2: CPU-only image
   # ==========================================================================
   build-cpu:
     name: CPU-only
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
@@ -173,37 +173,3 @@ jobs:
           echo "- Tags: \`${{ steps.meta.outputs.tags }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
 
-  # ==========================================================================
-  # Job 3: 鐢熸垚 README 闀滃儚鍒楄〃 (鍙€?
-  # ==========================================================================
-  update-readme:
-    name: Update README badges
-    runs-on: ubuntu-22.04
-    needs: [build-cuda, build-cpu]
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
-    permissions:
-      contents: write
-      packages: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Lowercase repo name
-        id: repo
-        run: echo "name=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
-
-      - name: Generate package info
-        run: |
-          echo "### Docker Images Published" > package-info.md
-          echo "" >> package-info.md
-          echo "| Image | Tag | Pull Command |" >> package-info.md
-          echo "|-------|-----|-------------|" >> package-info.md
-          echo "| CUDA (multi-arch) | \`cuda\`, \`cuda-YYYYMMDD\` | \`docker pull ${{ env.REGISTRY }}/${{ steps.repo.outputs.name }}:cuda\` |" >> package-info.md
-          echo "| CUDA (Turing 2080Ti) | \`cuda-75\`, \`cuda-75-YYYYMMDD\` | \`docker pull ${{ env.REGISTRY }}/${{ steps.repo.outputs.name }}:cuda-75\` |" >> package-info.md
-          echo "| CPU-only | \`cpu\`, \`cpu-YYYYMMDD\` | \`docker pull ${{ env.Registry }}/${{ steps.repo.outputs.name }}:cpu\` |" >> package-info.md
-          echo "" >> package-info.md
-          echo "*Auto-updated: $(date -u)*" >> package-info.md
-
-      - name: Show info
-        run: cat package-info.md
