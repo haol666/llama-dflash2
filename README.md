@@ -1,3 +1,7 @@
+> **[Deprecated / 已废弃]** DFlash2 has been merged into llama.cpp master via PR #27816 on 2026-08-27 (commit 10f9ca), with a follow-up NVFP4 fix in #28000 (cc231cb). This project is no longer maintained. Weekly auto-build is disabled. Existing GHCR images remain for reference.
+>
+> **推荐使用官方 llama.cpp master**，或查看新项目 [llama-xing4](https://github.com/haol666/llama-xing4)（Xing4.0 PR #29012 预构建镜像）
+
 
 # llama.cpp DFlash2 Docker 镜像
 
