@@ -35,9 +35,7 @@ on:
         options:
           - 'true'
           - 'false'
-  schedule:
-    # Weekly build every Monday UTC 02:00
-    - cron: '0 2 * * 1'
+  # schedule disabled - DFlash2 merged into master (#27816)
 
 env:
   REGISTRY: ghcr.io
